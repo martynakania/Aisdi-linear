@@ -24,26 +24,37 @@ public:
   class Iterator;
   using iterator = Iterator;
   using const_iterator = ConstIterator;
+  class Node;
 
-  HashMap()
-  {}
-
-  HashMap(std::initializer_list<value_type> list)
+private:
+    int size;
+    int bucketCount;
+    Node**tab;
+    static const int BUCKETINIT=101;
+public:
+  HashMap(int pBucketCount = BUCKETINIT) : size(0), bucketCount(pBucketCount)
   {
-    (void)list; // disables "unused argument" warning, can be removed when method is implemented.
-    throw std::runtime_error("TODO");
+    tab = new Node*[bucketCount]();
   }
 
-  HashMap(const HashMap& other)
+  HashMap(std::initializer_list<value_type> list):HashMap()
   {
-    (void)other;
-    throw std::runtime_error("TODO");
+    for(auto&& item :list)
+        insert(item.first, item.second);
+  }
+
+  HashMap(const HashMap& other):HashMap(other.bucketCount):HashMap()
+  {
+    for(auto&& item :other)
+        insert(item.first, item.second);
   }
 
   HashMap(HashMap&& other)
   {
-    (void)other;
-    throw std::runtime_error("TODO");
+    deleteMap();
+    size=other.size;
+    bucketCount=other.bucketCount;
+    tab = new Node*[bucketCount]();
   }
 
   HashMap& operator=(const HashMap& other)
@@ -149,6 +160,27 @@ public:
   const_iterator end() const
   {
     return cend();
+  }
+private:
+  size_t hash(const key_type& key) const
+  {
+      return std::hash<key_type>{}(key) % bucketCount;
+  }/*
+  void insert(const value_type& pPair)
+  {
+      Node* newNode=insert(pPair.first);
+     //newNode->pair.second=pPair.second;
+  }*/
+  Node* insert(const key_type& key,  mapped_type value=ValueType())
+  {
+      ++size;
+      Node* newNode= new Node(key, ValueType());
+      size_t indx=hash(key);
+      if(tab[indx]!=nullptr){
+          tab[indx]->prev=newNode;
+          newNode->nxt=tab[indx];
+      }
+      tab[indx]=newNode;
   }
 };
 
@@ -263,7 +295,19 @@ public:
     return const_cast<reference>(ConstIterator::operator*());
   }
 };
-
+template <typename KeyType, typename ValueType>
+class HashMap<KeyType, ValueType>:: Node
+{
+    friend class HashMap;
+    Node* nxt;
+    Node* prev;
+    value_type pair;
+public:
+    Node() : pair(), nxt(nullptr), prev(nullptr)
+            {};
+    Node(KeyType key, ValueType value) : pair(std::make_pair(key,value)), nxt(nullptr), prev(nullptr)
+            {}
+};
 }
 
 #endif /* AISDI_MAPS_HASHMAP_H */

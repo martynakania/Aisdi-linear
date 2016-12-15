@@ -54,22 +54,28 @@ public:
 
   HashMap(HashMap&& other):HashMap(other.bucketCount)
   {
-    size=other.size;
+    std::swap(size, other.size);
     std::swap(tab, other.tab);
   }
 
   HashMap& operator=(const HashMap& other)
   {
+    if(*this==other)
+        return *this;
     deleteElementsOfHashMap();
-    *this=HashMap(other);
+    for(auto&& item :other)
+        insert(item.first, item.second);
+    return *this;
   }
 
   HashMap& operator=(HashMap&& other)
   {
-      std::swap(tab, other.tab);
-      size= other.size;
-      bucketCount= other.bucketCount;
-      other.size=0;
+    if(*this==other)
+        return *this;
+    std::swap(tab, other.tab);
+    std::swap(bucketCount, other.bucketCount);
+    size= other.size;
+    other.size=0;
   }
 
   bool isEmpty() const
@@ -116,16 +122,14 @@ public:
     Node*toRemove=findNode(key);
     if(toRemove==nullptr)
         throw std::out_of_range("can not remove key that not exist in tree");
-    toRemove->nxt->prev=toRemove->prev;
-    toRemove->prev->nxt=toRemove->nxt;
-    delete toRemove;
+    removeNode(toRemove);
   }
 
   void remove(const const_iterator& it)
   {
     if (it == end())
         throw std::out_of_range("Can not remove the end");
-    remove(it->first);
+    removeNode(it.currentNode);
   }
 
   size_type getSize() const
@@ -183,21 +187,22 @@ public:
   ~HashMap()
   {
     deleteElementsOfHashMap();
+    delete[] tab;
   }
-private:
-  size_t hash(const key_type& key) const
+size_t hash(const key_type& key) const
   {
       return std::hash<key_type>{}(key) % bucketCount;
-  }/*
-  void insert(const value_type& pPair)
+  }
+private:
+/*
+  void insert(const key_type& key)
   {
-      Node* newNode=insert(pPair.first);
-     //newNode->pair.second=pPair.second;
+    insert(key, ValueType())
   }*/
   Node* insert(const key_type& key,  mapped_type value=ValueType())
   {
       ++size;
-      Node* newNode= new Node(key, ValueType());
+      Node* newNode= new Node(key, value);
       size_t indx=hash(key);
       if(tab[indx]!=nullptr){
           tab[indx]->prev=newNode;
@@ -206,6 +211,20 @@ private:
       tab[indx]=newNode;
       return newNode;
   }
+
+  void removeNode(Node* toRemove)
+  {
+    KeyType key=toRemove->pair.first;
+    if(toRemove->prev!=nullptr)
+        toRemove->prev->nxt=toRemove->nxt;
+    else if(toRemove->nxt==nullptr)
+        tab[hash(key)]=nullptr;
+    if(toRemove->nxt!=nullptr)
+        toRemove->nxt->prev=toRemove->prev;
+    --size;
+    delete toRemove;
+  }
+
   Node* findNode(key_type key) const
   {
     size_t idx=hash(key);
@@ -217,13 +236,14 @@ private:
     }
     return nullptr;
   }
+
   Node*getFirst() const
   {
       size_t idx=0;
       Node*node=nullptr;
-      while(node==nullptr && idx<bucketCount){
+      do{
           node=tab[idx];
-      }
+      }while(node==nullptr && ++idx<bucketCount);
       return node;
   }
   void deleteElementsOfHashMap()
@@ -238,31 +258,36 @@ private:
             delete temp;
             --size;
         }
+        tab[i]=nullptr;
     }
-    delete[]tab;
   }
+
   Node*getlast() const
   {
       if(size==0)
         return nullptr;
       size_t idx=bucketCount;
       Node*node=nullptr;
-      while(idx>=0){
+      while(idx>0){
+        --idx;
         node=tab[idx];
-        if(node!=nullptr)
-            while(node->nxt=nullptr){
-            node=node->nxt;
+        if(node!=nullptr){
+            while(node->nxt!=nullptr){
+                node=node->nxt;
             }
+            return node;
+        }
       }
-      return node;
+      return nullptr;
   }
+
 };
 
 template <typename KeyType, typename ValueType>
 class HashMap<KeyType, ValueType>::ConstIterator
 {
   const HashMap& hashMap; //Node**tab;//
-  Node*currentNode;
+public:  Node*currentNode;
   size_t currentIdx;
 
 public:
@@ -276,7 +301,7 @@ public:
         if(pNode==nullptr)
             currentIdx=hashMap.bucketCount;
         else
-            currentIdx=findIndex(pNode->pair.first);
+            currentIdx=hashMap.hash(pNode->pair.first);
     }
 
   ConstIterator(const ConstIterator& other): hashMap(other.hashMap), currentNode(other.currentNode), currentIdx(other.currentIdx)
@@ -287,9 +312,6 @@ public:
      if(currentNode==nullptr)
         throw std::out_of_range("can not increase end");
      currentNode=currentNode->nxt;
-     if(currentNode!=nullptr){
-        return *this;
-     }
      while(currentNode==nullptr && ++currentIdx<hashMap.bucketCount){
          currentNode=hashMap.tab[currentIdx];
      }
@@ -307,12 +329,12 @@ public:
   {
      if(hashMap.size==0)
         throw std::out_of_range("can not deincrement empty collection");
+     if(currentNode==hashMap.getFirst())
+        throw std::out_of_range("can not deincrement begin");
      if(currentNode==nullptr){
         currentNode=hashMap.getlast();
         return *this;
      }
-     if(currentNode==hashMap.getFirst())
-        throw std::out_of_range("can not deincrement begin");
      currentNode=currentNode->prev;
      while(currentNode==nullptr && --currentIdx>0){
          currentNode=hashMap.tab[currentIdx];
@@ -330,37 +352,26 @@ public:
   reference operator*() const
   {
     if(currentNode==nullptr)
-        std::out_of_range("can not dereferent iterator of end");
+        throw std::out_of_range("can not dereferent iterator of end");
     return currentNode->pair;
   }
 
   pointer operator->() const
   {
     if(currentNode==nullptr)
-        std::out_of_range("can not dereferent iterator of end");
+        throw std::out_of_range("can not dereferent iterator of end");
     return &this->operator*();
   }
 
   bool operator==(const ConstIterator& other) const
   {
-    return (currentNode==other.currentNode && hashMap.tab==other.hashMap.tab);
+    return (currentNode==other.currentNode);
   }
 
   bool operator!=(const ConstIterator& other) const
   {
     return !(*this == other);
   }
-protected:
-    size_t findIndex(KeyType key) const
-    {
-        size_t idx=hashMap.hash(key);
-        Node* node=hashMap.tab[idx];
-        while (node!=nullptr){
-          if(node->pair.first==key)
-                return idx;
-        }
-        return hashMap.bucketCount;//not find key
-    }
 };
 
 template <typename KeyType, typename ValueType>

@@ -36,6 +36,8 @@ public:
   HashMap(int pBucketCount = BUCKETINIT) : size(0), bucketCount(pBucketCount)
   {
     tab = new Node*[bucketCount]();
+    for(size_t i=0; i<bucketCount; ++i)
+        tab[i]=nullptr;
   }
 
   HashMap(std::initializer_list<value_type> list):HashMap()
@@ -52,22 +54,28 @@ public:
 
   HashMap(HashMap&& other):HashMap(other.bucketCount)
   {
-    size=other.size;
+    std::swap(size, other.size);
     std::swap(tab, other.tab);
   }
 
   HashMap& operator=(const HashMap& other)
   {
+    if(*this==other)
+        return *this;
     deleteElementsOfHashMap();
-    *this=HashMap(other);
+    for(auto&& item :other)
+        insert(item.first, item.second);
+    return *this;
   }
 
   HashMap& operator=(HashMap&& other)
   {
-      std::swap(tab, other.tab);
-      size= other.size;
-      bucketCount= other.bucketCount;
-      other.size=0;
+    if(*this==other)
+        return *this;
+    std::swap(tab, other.tab);
+    std::swap(bucketCount, other.bucketCount);
+    size= other.size;
+    other.size=0;
   }
 
   bool isEmpty() const
@@ -77,46 +85,51 @@ public:
 
   mapped_type& operator[](const key_type& key)
   {
-    Node*temp=findNode(key);
-    if(temp==nullptr)
-        temp=insert(key);
-    return temp->pair.second;
+    Node*node=findNode(key);
+    if(node==nullptr)
+        node=insert(key);
+    return node->pair.second;
   }
 
   const mapped_type& valueOf(const key_type& key) const
   {
-    (void)key;
-    throw std::runtime_error("TODO");
+    Node* node = findNode(key);
+    if (node == nullptr)
+        throw std::out_of_range("Key does not exists");
+    return node->pair.second;
   }
 
   mapped_type& valueOf(const key_type& key)
   {
-    (void)key;
-    throw std::runtime_error("TODO");
+    Node* node = findNode(key);
+    if (node == nullptr)
+        throw std::out_of_range("Key does not exists");
+    return node->pair.second;
   }
 
   const_iterator find(const key_type& key) const
   {
-    (void)key;
-    throw std::runtime_error("TODO");
+    return ConstIterator(*this, findNode(key) );
   }
 
   iterator find(const key_type& key)
   {
-    (void)key;
-    throw std::runtime_error("TODO");
+    return Iterator(*this, findNode(key) );
   }
 
   void remove(const key_type& key)
   {
-    (void)key;
-    throw std::runtime_error("TODO");
+    Node*toRemove=findNode(key);
+    if(toRemove==nullptr)
+        throw std::out_of_range("can not remove key that not exist in tree");
+    removeNode(toRemove);
   }
 
   void remove(const const_iterator& it)
   {
-    (void)it;
-    throw std::runtime_error("TODO");
+    if (it == end())
+        throw std::out_of_range("Can not remove the end");
+    removeNode(it.currentNode);
   }
 
   size_type getSize() const
@@ -126,8 +139,15 @@ public:
 
   bool operator==(const HashMap& other) const
   {
-    (void)other;
-    throw std::runtime_error("TODO");
+    if(size!=other.size)
+        return false;
+    Node*tempNode;
+    for(auto&& item:other){
+        tempNode=findNode(item.first);
+        if(tempNode==nullptr || tempNode->pair.second!=item.second)
+            return false;
+    }
+    return true;
   }
 
   bool operator!=(const HashMap& other) const
@@ -167,21 +187,22 @@ public:
   ~HashMap()
   {
     deleteElementsOfHashMap();
+    delete[] tab;
   }
-private:
-  size_t hash(const key_type& key) const
+size_t hash(const key_type& key) const
   {
       return std::hash<key_type>{}(key) % bucketCount;
-  }/*
-  void insert(const value_type& pPair)
+  }
+private:
+/*
+  void insert(const key_type& key)
   {
-      Node* newNode=insert(pPair.first);
-     //newNode->pair.second=pPair.second;
+    insert(key, ValueType())
   }*/
   Node* insert(const key_type& key,  mapped_type value=ValueType())
   {
       ++size;
-      Node* newNode= new Node(key, ValueType());
+      Node* newNode= new Node(key, value);
       size_t indx=hash(key);
       if(tab[indx]!=nullptr){
           tab[indx]->prev=newNode;
@@ -190,6 +211,20 @@ private:
       tab[indx]=newNode;
       return newNode;
   }
+
+  void removeNode(Node* toRemove)
+  {
+    KeyType key=toRemove->pair.first;
+    if(toRemove->prev!=nullptr)
+        toRemove->prev->nxt=toRemove->nxt;
+    else if(toRemove->nxt==nullptr)
+        tab[hash(key)]=nullptr;
+    if(toRemove->nxt!=nullptr)
+        toRemove->nxt->prev=toRemove->prev;
+    --size;
+    delete toRemove;
+  }
+
   Node* findNode(key_type key) const
   {
     size_t idx=hash(key);
@@ -201,13 +236,14 @@ private:
     }
     return nullptr;
   }
+
   Node*getFirst() const
   {
       size_t idx=0;
       Node*node=nullptr;
-      while(node==nullptr && idx<bucketCount){
+      do{
           node=tab[idx];
-      }
+      }while(node==nullptr && ++idx<bucketCount);
       return node;
   }
   void deleteElementsOfHashMap()
@@ -222,32 +258,37 @@ private:
             delete temp;
             --size;
         }
+        tab[i]=nullptr;
     }
-    delete[]tab;
   }
+
   Node*getlast() const
   {
       if(size==0)
         return nullptr;
       size_t idx=bucketCount;
       Node*node=nullptr;
-      while(idx>=0){
+      while(idx>0){
+        --idx;
         node=tab[idx];
-        if(node!=nullptr)
-            while(node->nxt=nullptr){
-            node=node->nxt;
+        if(node!=nullptr){
+            while(node->nxt!=nullptr){
+                node=node->nxt;
             }
+            return node;
+        }
       }
-      return node;
+      return nullptr;
   }
+
 };
 
 template <typename KeyType, typename ValueType>
 class HashMap<KeyType, ValueType>::ConstIterator
 {
   const HashMap& hashMap; //Node**tab;//
-  Node*currentNode;
-  size_t currentIdx=-1;
+public:  Node*currentNode;
+  size_t currentIdx;
 
 public:
   using reference = typename HashMap::const_reference;
@@ -255,8 +296,13 @@ public:
   using value_type = typename HashMap::value_type;
   using pointer = const typename HashMap::value_type*;
 
-  explicit ConstIterator(const HashMap& pMap, Node* pNode): hashMap(pMap), currentNode(pNode), currentIdx(findIndex(pNode->pair.first))
-        {}
+  explicit ConstIterator(const HashMap& pMap, Node* pNode): hashMap(pMap), currentNode(pNode)
+    {
+        if(pNode==nullptr)
+            currentIdx=hashMap.bucketCount;
+        else
+            currentIdx=hashMap.hash(pNode->pair.first);
+    }
 
   ConstIterator(const ConstIterator& other): hashMap(other.hashMap), currentNode(other.currentNode), currentIdx(other.currentIdx)
         {}
@@ -266,9 +312,6 @@ public:
      if(currentNode==nullptr)
         throw std::out_of_range("can not increase end");
      currentNode=currentNode->nxt;
-     if(currentNode!=nullptr){
-        return *this;
-     }
      while(currentNode==nullptr && ++currentIdx<hashMap.bucketCount){
          currentNode=hashMap.tab[currentIdx];
      }
@@ -286,12 +329,12 @@ public:
   {
      if(hashMap.size==0)
         throw std::out_of_range("can not deincrement empty collection");
+     if(currentNode==hashMap.getFirst())
+        throw std::out_of_range("can not deincrement begin");
      if(currentNode==nullptr){
         currentNode=hashMap.getlast();
         return *this;
      }
-     if(currentNode==hashMap.getFirst())
-        throw std::out_of_range("can not deincrement begin");
      currentNode=currentNode->prev;
      while(currentNode==nullptr && --currentIdx>0){
          currentNode=hashMap.tab[currentIdx];
@@ -309,37 +352,26 @@ public:
   reference operator*() const
   {
     if(currentNode==nullptr)
-        std::out_of_range("can not dereferent iterator of end");
+        throw std::out_of_range("can not dereferent iterator of end");
     return currentNode->pair;
   }
 
   pointer operator->() const
   {
     if(currentNode==nullptr)
-        std::out_of_range("can not dereferent iterator of end");
+        throw std::out_of_range("can not dereferent iterator of end");
     return &this->operator*();
   }
 
   bool operator==(const ConstIterator& other) const
   {
-    return (currentNode==other.currentNode && hashMap.tab==other.hashMap.tab);
+    return (currentNode==other.currentNode);
   }
 
   bool operator!=(const ConstIterator& other) const
   {
     return !(*this == other);
   }
-protected:
-    size_t findIndex(KeyType key) const
-    {
-        size_t idx=hashMap.hash(key);
-        Node* temp=hashMap.tab[idx];
-        while (temp!=nullptr){
-          if(temp->pair.first==key)
-                return idx;
-        }
-        return hashMap.bucketCount;//not find key
-    }
 };
 
 template <typename KeyType, typename ValueType>

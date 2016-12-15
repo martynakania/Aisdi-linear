@@ -31,6 +31,7 @@ private:
     int bucketCount;
     Node**tab;
     static const int BUCKETINIT=101;
+
 public:
   HashMap(int pBucketCount = BUCKETINIT) : size(0), bucketCount(pBucketCount)
   {
@@ -43,41 +44,43 @@ public:
         insert(item.first, item.second);
   }
 
-  HashMap(const HashMap& other):HashMap(other.bucketCount):HashMap()
+  HashMap(const HashMap& other):HashMap(other.bucketCount)
   {
     for(auto&& item :other)
         insert(item.first, item.second);
   }
 
-  HashMap(HashMap&& other)
+  HashMap(HashMap&& other):HashMap(other.bucketCount)
   {
-    deleteMap();
     size=other.size;
-    bucketCount=other.bucketCount;
-    tab = new Node*[bucketCount]();
+    std::swap(tab, other.tab);
   }
 
   HashMap& operator=(const HashMap& other)
   {
-    (void)other;
-    throw std::runtime_error("TODO");
+    deleteElementsOfHashMap();
+    *this=HashMap(other);
   }
 
   HashMap& operator=(HashMap&& other)
   {
-    (void)other;
-    throw std::runtime_error("TODO");
+      std::swap(tab, other.tab);
+      size= other.size;
+      bucketCount= other.bucketCount;
+      other.size=0;
   }
 
   bool isEmpty() const
   {
-    throw std::runtime_error("TODO");
+    return (size==0);
   }
 
   mapped_type& operator[](const key_type& key)
   {
-    (void)key;
-    throw std::runtime_error("TODO");
+    Node*temp=findNode(key);
+    if(temp==nullptr)
+        temp=insert(key);
+    return temp->pair.second;
   }
 
   const mapped_type& valueOf(const key_type& key) const
@@ -118,7 +121,7 @@ public:
 
   size_type getSize() const
   {
-    throw std::runtime_error("TODO");
+    return size;
   }
 
   bool operator==(const HashMap& other) const
@@ -132,26 +135,25 @@ public:
     return !(*this == other);
   }
 
-  iterator begin()
+   iterator begin()
   {
-    throw std::runtime_error("TODO");
+    return iterator(*this, getFirst() );
   }
 
   iterator end()
   {
-    throw std::runtime_error("TODO");
+    return iterator(*this, nullptr);
   }
 
   const_iterator cbegin() const
   {
-    throw std::runtime_error("TODO");
+    return ConstIterator(*this, getFirst() );
   }
 
   const_iterator cend() const
   {
-    throw std::runtime_error("TODO");
+    return ConstIterator(*this, nullptr );
   }
-
   const_iterator begin() const
   {
     return cbegin();
@@ -160,6 +162,11 @@ public:
   const_iterator end() const
   {
     return cend();
+  }
+
+  ~HashMap()
+  {
+    deleteElementsOfHashMap();
   }
 private:
   size_t hash(const key_type& key) const
@@ -181,67 +188,158 @@ private:
           newNode->nxt=tab[indx];
       }
       tab[indx]=newNode;
+      return newNode;
+  }
+  Node* findNode(key_type key) const
+  {
+    size_t idx=hash(key);
+    Node*tempNode=tab[idx];
+    while(tempNode!=nullptr){
+       if(tempNode->pair.first==key)
+            return tempNode;
+       tempNode=tempNode->nxt;
+    }
+    return nullptr;
+  }
+  Node*getFirst() const
+  {
+      size_t idx=0;
+      Node*node=nullptr;
+      while(node==nullptr && idx<bucketCount){
+          node=tab[idx];
+      }
+      return node;
+  }
+  void deleteElementsOfHashMap()
+  {
+    Node* node;
+    Node* temp;
+    for (size_type i = 0; i < bucketCount; ++i) {
+        node = tab[i];
+        while (node != nullptr) {
+            temp = node;
+            node = node->nxt;
+            delete temp;
+            --size;
+        }
+    }
+    delete[]tab;
+  }
+  Node*getlast() const
+  {
+      if(size==0)
+        return nullptr;
+      size_t idx=bucketCount;
+      Node*node=nullptr;
+      while(idx>=0){
+        node=tab[idx];
+        if(node!=nullptr)
+            while(node->nxt=nullptr){
+            node=node->nxt;
+            }
+      }
+      return node;
   }
 };
 
 template <typename KeyType, typename ValueType>
 class HashMap<KeyType, ValueType>::ConstIterator
 {
+  const HashMap& hashMap; //Node**tab;//
+  Node*currentNode;
+  size_t currentIdx=-1;
+
 public:
   using reference = typename HashMap::const_reference;
   using iterator_category = std::bidirectional_iterator_tag;
   using value_type = typename HashMap::value_type;
   using pointer = const typename HashMap::value_type*;
 
-  explicit ConstIterator()
-  {}
+  explicit ConstIterator(const HashMap& pMap, Node* pNode): hashMap(pMap), currentNode(pNode), currentIdx(findIndex(pNode->pair.first))
+        {}
 
-  ConstIterator(const ConstIterator& other)
-  {
-    (void)other;
-    throw std::runtime_error("TODO");
-  }
+  ConstIterator(const ConstIterator& other): hashMap(other.hashMap), currentNode(other.currentNode), currentIdx(other.currentIdx)
+        {}
 
   ConstIterator& operator++()
   {
-    throw std::runtime_error("TODO");
+     if(currentNode==nullptr)
+        throw std::out_of_range("can not increase end");
+     currentNode=currentNode->nxt;
+     if(currentNode!=nullptr){
+        return *this;
+     }
+     while(currentNode==nullptr && ++currentIdx<hashMap.bucketCount){
+         currentNode=hashMap.tab[currentIdx];
+     }
+    return *this;
   }
 
   ConstIterator operator++(int)
   {
-    throw std::runtime_error("TODO");
+    ConstIterator preIncremented(*this);
+    operator++();
+    return preIncremented;
   }
 
   ConstIterator& operator--()
   {
-    throw std::runtime_error("TODO");
+     if(hashMap.size==0)
+        throw std::out_of_range("can not deincrement empty collection");
+     if(currentNode==nullptr){
+        currentNode=hashMap.getlast();
+        return *this;
+     }
+     if(currentNode==hashMap.getFirst())
+        throw std::out_of_range("can not deincrement begin");
+     currentNode=currentNode->prev;
+     while(currentNode==nullptr && --currentIdx>0){
+         currentNode=hashMap.tab[currentIdx];
+     }
+    return *this;
   }
 
   ConstIterator operator--(int)
   {
-    throw std::runtime_error("TODO");
+    ConstIterator preDecremented(*this);
+    operator--();
+    return preDecremented;
   }
 
   reference operator*() const
   {
-    throw std::runtime_error("TODO");
+    if(currentNode==nullptr)
+        std::out_of_range("can not dereferent iterator of end");
+    return currentNode->pair;
   }
 
   pointer operator->() const
   {
+    if(currentNode==nullptr)
+        std::out_of_range("can not dereferent iterator of end");
     return &this->operator*();
   }
 
   bool operator==(const ConstIterator& other) const
   {
-    (void)other;
-    throw std::runtime_error("TODO");
+    return (currentNode==other.currentNode && hashMap.tab==other.hashMap.tab);
   }
 
   bool operator!=(const ConstIterator& other) const
   {
     return !(*this == other);
   }
+protected:
+    size_t findIndex(KeyType key) const
+    {
+        size_t idx=hashMap.hash(key);
+        Node* temp=hashMap.tab[idx];
+        while (temp!=nullptr){
+          if(temp->pair.first==key)
+                return idx;
+        }
+        return hashMap.bucketCount;//not find key
+    }
 };
 
 template <typename KeyType, typename ValueType>
@@ -251,12 +349,13 @@ public:
   using reference = typename HashMap::reference;
   using pointer = typename HashMap::value_type*;
 
-  explicit Iterator()
-  {}
+  explicit Iterator(const HashMap& pMap, Node* pNode)
+        : ConstIterator(pMap, pNode)
+            {}
 
   Iterator(const ConstIterator& other)
     : ConstIterator(other)
-  {}
+    {}
 
   Iterator& operator++()
   {
